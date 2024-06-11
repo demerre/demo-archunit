@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.RestController;
 
-public class ArchUnitTest {
+class ArchUnitTest {
     JavaClasses importedClasses = new ClassFileImporter().importPackages("com.example");
 
     // Each class name in a controller package with a @RestController annotation should end with 'Controller'
@@ -24,9 +24,7 @@ public class ArchUnitTest {
                 .and().areAnnotatedWith(RestController.class)
                 .should().haveSimpleNameEndingWith("Controller");
 
-        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> {
-            rule.check(importedClasses);
-        });
+        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> rule.check(importedClasses));
 
         String expectedMessage = """
             Architecture Violation [Priority: MEDIUM] - Rule 'classes that reside in a package '..controller..' and are annotated with @RestController should have simple name ending with 'Controller'' was violated (1 times):
@@ -43,9 +41,7 @@ public class ArchUnitTest {
                 .should().onlyDependOnClassesThat()
                 .resideInAnyPackage("com.example.common..", "java..", "org.springframework..");
 
-        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> {
-            rule.check(importedClasses);
-        });
+        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> rule.check(importedClasses));
 
         String expectedMessage = """
                 Architecture Violation [Priority: MEDIUM] - Rule 'classes that reside in a package '..payment..' should only depend on classes that reside in any package ['com.example.common..', 'java..', 'org.springframework..']' was violated (3 times):
@@ -64,9 +60,7 @@ public class ArchUnitTest {
                 .should().dependOnClassesThat()
                 .resideOutsideOfPackages("com.example.common..", "java..", "org.springframework..");
 
-        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> {
-            rule.check(importedClasses);
-        });
+        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> rule.check(importedClasses));
 
         String expectedMessage = """
                 Architecture Violation [Priority: MEDIUM] - Rule 'no classes that reside in a package 'com.example.common..' should depend on classes that reside outside of packages ['com.example.common..', 'java..', 'org.springframework..']' was violated (3 times):
@@ -90,9 +84,7 @@ public class ArchUnitTest {
                 .whereLayer("Controller").mayNotBeAccessedByAnyLayer()
                 .whereLayer("Service").mayOnlyBeAccessedByLayers("Controller");
 
-        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> {
-            arch.check(importedClasses);
-        });
+        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> arch.check(importedClasses));
 
         String expectedMessage = """
                 Architecture Violation [Priority: MEDIUM] - Rule 'Layered architecture considering all dependencies, consisting of
