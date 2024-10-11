@@ -3,99 +3,98 @@ package com.example;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.lang.ArchRule;
 import com.tngtech.archunit.library.Architectures.LayeredArchitecture;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.RestController;
 
 class ArchUnitTest {
-    JavaClasses importedClasses = new ClassFileImporter().importPackages("com.example");
 
-    // Each class name in a controller package with a @RestController annotation should end with 'Controller'
-    @Test
-    void controllerClassNameShouldEndWithController() {
-        ArchRule rule = classes()
-                .that().resideInAPackage("..controller..")
-                .and().areAnnotatedWith(RestController.class)
-                .should().haveSimpleNameEndingWith("Controller");
+  JavaClasses importedClasses = new ClassFileImporter().importPackages("com.example");
 
-        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> rule.check(importedClasses));
+  // Validate that class names in the controller package end with Controller
+  @Test
+  void controllerClassNameShouldEndWithController() {
+    ArchRule rule = classes()
+        .that().resideInAPackage("..controller..")
+        .and().areAnnotatedWith(RestController.class)
+        .should().haveSimpleNameEndingWith("Controller");
 
-        String expectedMessage = """
-            Architecture Violation [Priority: MEDIUM] - Rule 'classes that reside in a package '..controller..' and are annotated with @RestController should have simple name ending with 'Controller'' was violated (1 times):
-            Class <com.example.payment.controller.WronglyNamed> does not have simple name ending with 'Controller' in (WronglyNamed.java:0)""";
+    rule.check(importedClasses);
+  }
 
-        assertEquals(expectedMessage, assertionError.getMessage().replaceAll("\\r\\n", "\n"));
-    }
 
-    // Classes in the payment package should only use classes in the common or java packages.
-    @Test
-    void paymentFeatureShouldNotDependOnOtherFeatures() {
-        ArchRule rule = classes()
-                .that().resideInAPackage("..payment..")
-                .should().onlyDependOnClassesThat()
-                .resideInAnyPackage("com.example.common..", "java..", "org.springframework..");
+  // Ensure the payment package only depends on the common or java packages
+  @Test
+  void paymentFeatureShouldNotDependOnOtherFeatures() {
+    ArchRule rule = classes()
+        .that().resideInAPackage("..payment..")
+        .should().onlyDependOnClassesThat()
+        .resideInAnyPackage("com.example.common..", "java..", "org.springframework..");
 
-        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> rule.check(importedClasses));
+    rule.check(importedClasses);
+  }
 
-        String expectedMessage = """
-                Architecture Violation [Priority: MEDIUM] - Rule 'classes that reside in a package '..payment..' should only depend on classes that reside in any package ['com.example.common..', 'java..', 'org.springframework..']' was violated (3 times):
-                Constructor <com.example.payment.controller.PaymentController.<init>(com.example.reservation.service.ReservationService)> has parameter of type <com.example.reservation.service.ReservationService> in (PaymentController.java:0)
-                Field <com.example.payment.controller.PaymentController.reservationService> has type <com.example.reservation.service.ReservationService> in (PaymentController.java:0)
-                Method <com.example.payment.controller.PaymentController.paymentFunction()> calls method <com.example.reservation.service.ReservationService.reservationServiceFunction()> in (PaymentController.java:18)""";
 
-        assertEquals(expectedMessage, assertionError.getMessage().replaceAll("\\r\\n", "\n"));
-    }
+  // Ensure the common package does not depend on any other feature packages
+  @Test
+  void commonCodeShouldNotDependOnOtherFeatures() {
+    ArchRule rule = noClasses()
+        .that().resideInAPackage("com.example.common..")
+        .should().dependOnClassesThat()
+        .resideOutsideOfPackages("com.example.common..", "java..", "org.springframework..");
 
-    // Classes in the common package shouldn't use classes outside of the package
-    @Test
-    void commonCodeShouldNotDependOnOtherFeatures() {
-        ArchRule rule = noClasses()
-                .that().resideInAPackage("com.example.common..")
-                .should().dependOnClassesThat()
-                .resideOutsideOfPackages("com.example.common..", "java..", "org.springframework..");
+    rule.check(importedClasses);
+  }
 
-        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> rule.check(importedClasses));
 
-        String expectedMessage = """
-                Architecture Violation [Priority: MEDIUM] - Rule 'no classes that reside in a package 'com.example.common..' should depend on classes that reside outside of packages ['com.example.common..', 'java..', 'org.springframework..']' was violated (3 times):
-                Constructor <com.example.common.service.CommonService.<init>(com.example.reservation.service.ReservationService)> has parameter of type <com.example.reservation.service.ReservationService> in (CommonService.java:0)
-                Field <com.example.common.service.CommonService.reservationService> has type <com.example.reservation.service.ReservationService> in (CommonService.java:0)
-                Method <com.example.common.service.CommonService.commonFunction()> calls method <com.example.reservation.service.ReservationService.reservationServiceFunction()> in (CommonService.java:15)""";
+  // Ensure controller layer is isolated and service is only accessed by controller
+  @Test
+  void controllerShouldOnlyUseService() {
+    LayeredArchitecture arch = layeredArchitecture()
+        .consideringAllDependencies()
+        .layer("Controller").definedBy("..controller..")
+        .layer("Service").definedBy("..service..")
+        .whereLayer("Controller").mayNotBeAccessedByAnyLayer()
+        .whereLayer("Service").mayOnlyBeAccessedByLayers("Controller");
 
-        assertEquals(expectedMessage, assertionError.getMessage().replaceAll("\\r\\n", "\n"));
-    }
+    arch.check(importedClasses);
+  }
 
-    // Classes in the controller package cannot be used by any layer.
-    // Classes in the service package can be used by classes in the controller layer
-    @Test
-    void controllerShouldOnlyUseService() {
-        LayeredArchitecture arch = layeredArchitecture()
-                .consideringAllDependencies()
-                // Define layers
-                .layer("Controller").definedBy("..controller..")
-                .layer("Service").definedBy("..service..")
-                // Add constraints
-                .whereLayer("Controller").mayNotBeAccessedByAnyLayer()
-                .whereLayer("Service").mayOnlyBeAccessedByLayers("Controller");
 
-        AssertionError assertionError = Assertions.assertThrows(AssertionError.class, () -> arch.check(importedClasses));
+  // Ensure domain modules do not depend on each other
+  @Test
+  void domainModulesShouldNotDependOnEachOther() {
+    ArchRule rule = noClasses()
+        .that().resideInAPackage("com.example.payment..")
+        .should().dependOnClassesThat()
+        .resideInAPackage("com.example.reservation..");
 
-        String expectedMessage = """
-                Architecture Violation [Priority: MEDIUM] - Rule 'Layered architecture considering all dependencies, consisting of
-                layer 'Controller' ('..controller..')
-                layer 'Service' ('..service..')
-                where layer 'Controller' may not be accessed by any layer
-                where layer 'Service' may only be accessed by layers ['Controller']' was violated (3 times):
-                Constructor <com.example.reservation.service.ReservationService.<init>(com.example.reservation.controller.ReservationController)> has parameter of type <com.example.reservation.controller.ReservationController> in (ReservationService.java:0)
-                Field <com.example.reservation.service.ReservationService.reservationController> has type <com.example.reservation.controller.ReservationController> in (ReservationService.java:0)
-                Method <com.example.reservation.service.ReservationService.reservationServiceFunction()> calls method <com.example.reservation.controller.ReservationController.reservationControllerFunction()> in (ReservationService.java:16)""";
+    rule.check(importedClasses);
+  }
 
-        assertEquals(expectedMessage, assertionError.getMessage().replaceAll("\\r\\n", "\n"));
-    }
+  // Validate that class names in the service package end with Service
+  @Test
+  void serviceClassesShouldBeSuffixedWithService() {
+    ArchRule rule = classes()
+        .that().resideInAPackage("..service..")
+        .should().haveSimpleNameEndingWith("Service");
+
+    rule.check(importedClasses);
+  }
+
+  // Ensure controller package depends only on service or common
+  @Test
+  void controllerShouldOnlyDependOnServiceOrCommon() {
+    ArchRule rule = classes()
+        .that().resideInAPackage("..controller..")
+        .should().onlyDependOnClassesThat()
+        .resideInAnyPackage("..service..", "java..", "org.springframework..",
+            "com.example.common..");
+
+    rule.check(importedClasses);
+  }
 }
